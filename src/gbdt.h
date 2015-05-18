@@ -31,6 +31,12 @@ public:
 
     bool LoadConfig(const std::string& conf_file);
     
+    void setMaxEpochs(unsigned int n) { m_max_epochs = n; }
+    void setMaxTreeLeafs(unsigned int n) { m_max_tree_leafes = n; }
+    void setFeatureSubspaceSize(unsigned int n) { m_feature_subspace_size = n; }
+    void setLearningRate(double r) { m_lrate = r; }
+    void setDataSampleRatio(double r) { m_data_sample_ratio = r; }
+    
 private:
     bool ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse);
     

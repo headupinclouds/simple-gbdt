@@ -13,7 +13,7 @@
 #include "gbdt.h"
 #include "tbb/parallel_sort.h"
 
-using namespace tbb;
+//using namespace tbb;
 
 using std::cout;
 using std::endl;
@@ -152,7 +152,7 @@ bool GBDT::Train(const Data& data)
     for ( ; train_epoch < m_max_epochs; train_epoch++ )
     {
         double rmse = 0.0;
-        cout << "epoch: " << train_epoch << endl;
+        //cout << "epoch: " << train_epoch << endl;
 
         ModelUpdate(data, train_epoch, rmse);
         
@@ -291,8 +291,9 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
         trainRMSE += err * err;
     }
     rmse = sqrt ( trainRMSE/ ( double ) nSamples );
-    cout<<"RMSE:"<< rmse <<" " << trainRMSE << " "<<std::flush;
-    cout<<"cost: " << Milliseconds() -t0<<"[ms]"<<endl;
+    
+    //cout<<"RMSE:"<< rmse <<" " << trainRMSE << " "<<std::flush;
+    //cout<<"cost: " << Milliseconds() -t0<<"[ms]"<<endl;
 
     delete[] usedFeatures;
     delete[] inputTmp;
@@ -432,7 +433,7 @@ void GBDT::TrainSingleTree(
                 list[j].first = ptrInput[j];
                 list[j].second = sortIndex[j];
             }
-            parallel_sort(list.begin(),list.end());
+            tbb::parallel_sort(list.begin(),list.end());
             for(int j=0;j<nNodeSamples;j++)
             {
                 ptrInput[j] = list[j].first;

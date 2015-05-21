@@ -115,18 +115,21 @@ bool GBDT::LoadConfig(const std::string& conf_file)
 
 bool GBDT::Init()
 {
-    m_trees = new node[m_max_epochs];
+    //m_trees = new node[m_max_epochs];
+    m_trees.resize(m_max_epochs);
+    
     for (unsigned int i = 0; i < m_max_epochs ; ++i )
     {
         m_trees[i].m_featureNr = -1;
         m_trees[i].m_value = 1e10;
         m_trees[i].m_toSmallerEqual = 0;
         m_trees[i].m_toLarger = 0;
-        m_trees[i].m_trainSamples = 0;
+        m_trees[i].m_trainSamples.clear();
         m_trees[i].m_nSamples = -1;
     }
 
     srand(time(0));
+#if 0
     cout << "configure--------" << endl;
     cout <<  "  max_epochs: " << m_max_epochs << endl;
     cout <<  "  max_tree_leafes: " << m_max_tree_leafes << endl;
@@ -135,6 +138,7 @@ bool GBDT::Init()
     cout <<  "  learn_rate: " << m_lrate << endl;
     cout <<  "  data_sample_ratio: " << m_data_sample_ratio << endl;
     cout << endl;
+#endif
     
     return true;
 }
@@ -161,7 +165,7 @@ bool GBDT::Train(const Data& data)
         //if (pre_rmse - rmse < ( m_lrate * 0.001 ) && pre_rmse != -1)
         if (pre_rmse < rmse && pre_rmse != -1)
         {
-            cout << "debug: rmse:" << rmse << " " << pre_rmse << " " << pre_rmse - rmse << std::endl;
+            //cout << "debug: rmse:" << rmse << " " << pre_rmse << " " << pre_rmse - rmse << std::endl;
             break;
         }
         pre_rmse = rmse;
@@ -194,7 +198,7 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
             mean /= ( double ) data.m_num;
         }
         m_global_mean = mean;
-        std::cout << "globalMean:"<< mean<<" "<<std::flush;
+        //std::cout << "globalMean:"<< mean<<" "<<std::flush;
 
         //align by targets mean
         for ( unsigned int j=0 ; j<data.m_num ; j++ )
@@ -210,9 +214,9 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     int data_sample_num = int(nSamples * m_data_sample_ratio);
     if( data_sample_num < 10 ) data_sample_num = nSamples;
     
-    m_trees[train_epoch].m_trainSamples = new int[data_sample_num];
+    m_trees[train_epoch].m_trainSamples.resize(data_sample_num);
     m_trees[train_epoch].m_nSamples = data_sample_num;
-    int* ptr = m_trees[train_epoch].m_trainSamples;
+    int* ptr = &m_trees[train_epoch].m_trainSamples[0];
 
     set<int> used_data_ids;
     int sampled_count = 0;
@@ -309,12 +313,14 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
 
 void GBDT::cleanTree ( node* n )
 {
-    if ( n->m_trainSamples )
-    {
-        delete[] n->m_trainSamples;
-        n->m_trainSamples = 0;
-    }
-    n->m_nSamples = 0;
+    //if ( n->m_trainSamples )
+    //{
+    //    delete[] n->m_trainSamples;
+    //    n->m_trainSamples = 0;
+    //}
+    
+    n->m_nSamples = 0;    
+    n->m_trainSamples.clear();
 
     if ( n->m_toSmallerEqual )
         cleanTree ( n->m_toSmallerEqual );
@@ -495,7 +501,7 @@ void GBDT::TrainSingleTree(
 
     if ( n->m_featureNr < 0 || n->m_featureNr >= (int)nFeatures )
     {
-        cout<<"f="<<n->m_featureNr<<endl;
+        //cout<<"f="<<n->m_featureNr<<endl;
         assert ( false );
     }
 
@@ -508,12 +514,15 @@ void GBDT::TrainSingleTree(
             cnt++;
     }
 
-    int* lowList = new int[cnt];
-    int* hiList = new int[nNodeSamples-cnt];
-    if ( cnt == 0 )
-        lowList = 0;
-    if ( nNodeSamples-cnt == 0 )
-        hiList = 0;
+    std::vector<int> lowList(cnt);
+    std::vector<int> hiList(nNodeSamples-cnt);
+    
+    //int* lowList = new int[cnt];
+    //int* hiList = new int[nNodeSamples-cnt];
+    //if ( cnt == 0 )
+    //    lowList = 0;
+    //if ( nNodeSamples-cnt == 0 )
+    //    hiList = 0;
 
     int lowCnt = 0, hiCnt = 0;
     double lowMean = 0.0, hiMean = 0.0;
@@ -547,9 +556,8 @@ void GBDT::TrainSingleTree(
         n->m_value = lowCnt < 1 ? hiMean : lowMean;
         n->m_toSmallerEqual = 0;
         n->m_toLarger = 0;
-        if ( n->m_trainSamples )
-            delete[] n->m_trainSamples;
-        n->m_trainSamples = 0;
+        if ( n->m_trainSamples.size() )
+            n->m_trainSamples.clear();
         n->m_nSamples = 0;
 
         nodeReduced currentNode;
@@ -600,7 +608,7 @@ T_DTYPE GBDT::predictSingleTree ( node* n, const Data& data, int data_index )
     int nr = n->m_featureNr;
     if(nr < -1 || nr >= nFeatures)
     {
-        cout<<"Feature nr:"<<nr<<endl;
+        //cout<<"Feature nr:"<<nr<<endl;
         assert(false);
     }
     
@@ -611,7 +619,7 @@ T_DTYPE GBDT::predictSingleTree ( node* n, const Data& data, int data_index )
     //TODO : del duplicate check
     if(nr < 0 || nr >= nFeatures)
     {
-        cout<<endl<<"Feature nr: "<<nr<<" (max:"<<nFeatures<<")"<<endl;
+        //cout<<endl<<"Feature nr: "<<nr<<" (max:"<<nFeatures<<")"<<endl;
         assert(false);
     }
     T_DTYPE thresh = n->m_value;
@@ -644,7 +652,7 @@ void GBDT::PredictAllOutputs ( const Data& data, T_VECTOR& predictions)
 
 void GBDT::SaveWeights(const std::string& model_file)
 {
-    cout<<"Save:"<<model_file <<endl;
+    //cout<<"Save:"<<model_file <<endl;
     std::fstream f ( model_file.c_str(), std::ios::out );
 
     // save learnrate
@@ -660,7 +668,7 @@ void GBDT::SaveWeights(const std::string& model_file)
     for ( unsigned int j=0;j<m_train_epoch+1;j++ )
         SaveTreeRecursive ( & ( m_trees[j] ), f );
 
-    cout << "debug: train_epoch: " << m_train_epoch << endl;
+    //cout << "debug: train_epoch: " << m_train_epoch << endl;
     f.close();
 }
 
@@ -676,11 +684,11 @@ void GBDT::SaveTreeRecursive ( node* n, std::fstream &f )
 
 void GBDT::LoadWeights(const std::string& model_file)
 {
-    cout<<"Load:"<<model_file<<endl;
+    //cout<<"Load:"<<model_file<<endl;
     std::fstream f ( model_file.c_str(), std::ios::in );
     if ( f.is_open() == false )
     {
-        cout << "Load " << model_file << "failed!" << endl;
+        //cout << "Load " << model_file << "failed!" << endl;
         _Exit(1);
     }
 
@@ -694,7 +702,8 @@ void GBDT::LoadWeights(const std::string& model_file)
     f.read ( ( char* ) &m_global_mean, sizeof ( m_global_mean )  );
 
     // allocate and load the trees
-    m_trees = new node[m_train_epoch+1];
+    //m_trees = new node[m_train_epoch+1];
+    m_trees.resize(m_train_epoch+1);
     for ( unsigned int j=0;j<m_train_epoch+1;j++ )
     {
         std::string prefix = "";

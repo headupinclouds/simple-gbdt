@@ -12,6 +12,11 @@
 #include "tree.h"
 #include "ml_data.h"
 
+// TODO: Create Impl and hide this
+#include <boost/serialization/list.hpp>
+#include <boost/serialization/string.hpp>
+#include <boost/serialization/version.hpp>
+
 class GBDT
 {
 public:
@@ -25,10 +30,6 @@ public:
 
     void PredictAllOutputs ( const Data& data, T_VECTOR& predictions);
 
-    void SaveWeights(const std::string& model_file);
-
-    void LoadWeights(const std::string& model_file);
-
     bool LoadConfig(const std::string& conf_file);
     
     void setMaxEpochs(unsigned int n) { m_max_epochs = n; }
@@ -37,7 +38,28 @@ public:
     void setLearningRate(double r) { m_lrate = r; }
     void setDataSampleRatio(double r) { m_data_sample_ratio = r; }
     
+    unsigned int getMaxEpochs() const { return m_max_epochs; }
+    unsigned int getMaxTreeLeafs() const { return m_max_tree_leafes; }
+    unsigned int getFeatureSubspaceSize()  const { return m_feature_subspace_size; }
+    double setLearningRate() const { return m_lrate; }
+    double setDataSampleRatio() const { return m_data_sample_ratio; }
+    
+    // Original serialization:
+    void SaveWeights(const std::string& model_file);
+    void LoadWeights(const std::string& model_file);
+    
 private:
+    
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        ar & m_lrate;
+        ar & m_train_epoch;
+        ar & m_global_mean;
+        ar & m_trees;
+    }
+        
     bool ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse);
     
     void TrainSingleTree(
@@ -62,7 +84,9 @@ private:
     void SaveTreeRecursive ( node* n, std::fstream &f );
     void LoadTreeRecursive ( node* n, std::fstream &f , std::string prefix);
 private:
-    node * m_trees;
+    
+    //node * m_trees;
+    std::vector<node> m_trees;
     unsigned int m_max_epochs;
     unsigned int m_max_tree_leafes;
     unsigned int m_feature_subspace_size;

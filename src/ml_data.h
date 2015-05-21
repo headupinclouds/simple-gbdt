@@ -15,14 +15,11 @@ class Data
 {
 public:
     Data(){}
-
     ~Data(){}
 public:
     T_MATRIX m_data;
     T_VECTOR m_target;
-
     std::set<int>    m_valid_id;
-
     unsigned int m_dimension;
     unsigned int m_num;
 private:
@@ -32,11 +29,8 @@ class DataReader
 {
 public:
     DataReader(){}
-
     ~DataReader(){}
-
     bool ReadDataFromL2R(const std::string& input_file, Data& data, unsigned int dimentions);
-
     bool ReadDataFromCVS(const std::string& input_file, Data& data);
     
 private:

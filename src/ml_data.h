@@ -19,7 +19,7 @@ public:
 public:
     T_MATRIX m_data;
     T_VECTOR m_target;
-    std::set<int>    m_valid_id;
+    std::set<int> m_valid_id;
     unsigned int m_dimension;
     unsigned int m_num;
 private:

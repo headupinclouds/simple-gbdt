@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <time.h>
 #include <sys/time.h>
+#include <iomanip>
 
 #include "gbdt.h"
 #include "tbb/parallel_sort.h"
@@ -49,6 +50,11 @@ GBDT::GBDT()
     m_data_sample_ratio = 0.4;
 }
 
+
+GBDT::~GBDT()
+{
+
+}
 
 bool GBDT::LoadConfig(const std::string& conf_file)
 {
@@ -125,7 +131,6 @@ bool GBDT::Init()
         m_trees[i].m_toSmallerEqual = 0;
         m_trees[i].m_toLarger = 0;
         m_trees[i].m_trainSamples.clear();
-        m_trees[i].m_nSamples = -1;
     }
 
     srand(time(0));
@@ -143,12 +148,25 @@ bool GBDT::Init()
     return true;
 }
 
+// https://www.ross.click/2011/02/creating-a-progress-bar-in-c-or-any-other-console-app/
+static inline void loadbar(unsigned int x, unsigned int n, unsigned int w = 50)
+{
+    if ( (x != n) && (x % (n/100+1) != 0) ) return;
+    
+    float ratio  =  x/(float)n;
+    int   c      =  ratio * w;
+    
+    std::cout << std::setw(3) << (int)(ratio*100) << "% [";
+    for (int x=0; x<c; x++) std::cout << "=";
+    for (int x=c; x<w; x++) std::cout << " ";
+    std::cout << "]\r" << std::flush;
+}
+
 bool GBDT::Train(const Data& data)
 {
     m_tree_target.resize( data.m_target.size() );
     m_feature_subspace_size = 
         m_feature_subspace_size > data.m_dimension ? data.m_dimension : m_feature_subspace_size;
-
 
     double pre_rmse = -1;
     unsigned int train_epoch =0;
@@ -156,10 +174,10 @@ bool GBDT::Train(const Data& data)
     for ( ; train_epoch < m_max_epochs; train_epoch++ )
     {
         double rmse = 0.0;
-        //cout << "epoch: " << train_epoch << endl;
+        
+        loadbar(train_epoch, m_max_epochs, 128);
 
         ModelUpdate(data, train_epoch, rmse);
-        
         
         //if (pre_rmse < rmse && pre_rmse != -1)
         //if (pre_rmse - rmse < ( m_lrate * 0.001 ) && pre_rmse != -1)
@@ -182,10 +200,19 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     int nSamples = data.m_num;
     unsigned int nFeatures = data.m_dimension;
     
+#define USE_STL 1
+
+#if USE_STL
+    std::deque<bool> usedFeatures(data.m_dimension);
+    std::vector<T_DTYPE> inputTmp((nSamples+1)*m_feature_subspace_size);
+    std::vector<T_DTYPE> inputTargetSort((nSamples+1)*m_feature_subspace_size);
+    std::vector<int> sortIndex(nSamples);
+#else
     bool* usedFeatures = new bool[data.m_dimension];
     T_DTYPE* inputTmp = new T_DTYPE[(nSamples+1)*m_feature_subspace_size];
     T_DTYPE* inputTargetsSort = new T_DTYPE[(nSamples+1)*m_feature_subspace_size];
     int* sortIndex = new int[nSamples];
+#endif
     
     //----first epoch----
     if (train_epoch == 0)
@@ -215,8 +242,7 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     if( data_sample_num < 10 ) data_sample_num = nSamples;
     
     m_trees[train_epoch].m_trainSamples.resize(data_sample_num);
-    m_trees[train_epoch].m_nSamples = data_sample_num;
-    int* ptr = &m_trees[train_epoch].m_trainSamples[0];
+    auto &trainSamples = m_trees[train_epoch].m_trainSamples;
 
     set<int> used_data_ids;
     int sampled_count = 0;
@@ -225,7 +251,7 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
         int id = rand()%nSamples;
         if ( used_data_ids.find(id) == used_data_ids.end() ) //can't find the id
         {
-            ptr[sampled_count] = id;
+            trainSamples[sampled_count] = id;
             sampled_count++;
             used_data_ids.insert(id);
         }
@@ -262,15 +288,17 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     for ( unsigned int j=0; j<m_max_tree_leafes; j++ )
     {
         node* largestNode = largestNodes[0].m_node;
+        
+        //std::cout << "Train tree: " << j << "/" << m_max_tree_leafes << " = " << float(j)/m_max_tree_leafes << std::endl;
 
-        TrainSingleTree( 
+        TrainSingleTree(
             largestNode, 
             largestNodes, 
             data, 
-            usedFeatures,
-            inputTmp,
-            inputTargetsSort,
-            sortIndex,
+            &usedFeatures[0],
+            &inputTmp[0],
+            &inputTargetSort[0],
+            &sortIndex[0],
             randFeatureIDs
             );
         
@@ -299,6 +327,7 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     //cout<<"RMSE:"<< rmse <<" " << trainRMSE << " "<<std::flush;
     //cout<<"cost: " << Milliseconds() -t0<<"[ms]"<<endl;
 
+#if !USE_STL
     delete[] usedFeatures;
     delete[] inputTmp;
     delete[] inputTargetsSort;
@@ -307,6 +336,7 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     inputTmp = NULL;
     inputTargetsSort = NULL;
     sortIndex = NULL;
+#endif
     
     return true;
 }
@@ -319,7 +349,6 @@ void GBDT::cleanTree ( node* n )
     //    n->m_trainSamples = 0;
     //}
     
-    n->m_nSamples = 0;    
     n->m_trainSamples.clear();
 
     if ( n->m_toSmallerEqual )
@@ -344,7 +373,7 @@ void GBDT::TrainSingleTree(
     
     // break criteria: tree size limit or too less training samples
     unsigned int nS = largestNodes.size();
-    if ( nS >= m_max_tree_leafes || n->m_nSamples <= 1 )
+    if ( nS >= m_max_tree_leafes || n->m_trainSamples.size() <= 1 )
         return;
 
     // delete the current node (is currently the largest element in the heap)
@@ -356,7 +385,7 @@ void GBDT::TrainSingleTree(
     }
 
     // the number of training samples in this node
-    int nNodeSamples = n->m_nSamples;
+    int nNodeSamples = n->m_trainSamples.size();
 
     // precalc sums and squared sums of targets
     double sumTarget = 0.0, sum2Target = 0.0;
@@ -556,9 +585,7 @@ void GBDT::TrainSingleTree(
         n->m_value = lowCnt < 1 ? hiMean : lowMean;
         n->m_toSmallerEqual = 0;
         n->m_toLarger = 0;
-        if ( n->m_trainSamples.size() )
-            n->m_trainSamples.clear();
-        n->m_nSamples = 0;
+        n->m_trainSamples.clear();
 
         nodeReduced currentNode;
         currentNode.m_node = n;
@@ -575,8 +602,7 @@ void GBDT::TrainSingleTree(
     n->m_toSmallerEqual->m_value = lowMean;
     n->m_toSmallerEqual->m_toSmallerEqual = 0;
     n->m_toSmallerEqual->m_toLarger = 0;
-    n->m_toSmallerEqual->m_trainSamples = lowList;
-    n->m_toSmallerEqual->m_nSamples = lowCnt;
+    n->m_toSmallerEqual->m_trainSamples = lowList; assert(lowList.size() == lowCnt);
 
     // prepare second new node
     n->m_toLarger = new node;
@@ -584,8 +610,7 @@ void GBDT::TrainSingleTree(
     n->m_toLarger->m_value = hiMean;
     n->m_toLarger->m_toSmallerEqual = 0;
     n->m_toLarger->m_toLarger = 0;
-    n->m_toLarger->m_trainSamples = hiList;
-    n->m_toLarger->m_nSamples = hiCnt;
+    n->m_toLarger->m_trainSamples = hiList; assert(hiList.size() == hiCnt);
 
     // add the new two nodes to the heap
     nodeReduced lowNode, hiNode;

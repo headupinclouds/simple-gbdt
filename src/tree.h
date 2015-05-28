@@ -15,18 +15,22 @@ typedef struct node_
     struct node_* m_toSmallerEqual;   // pointer to node, if:  feature[m_featureNr] <=  m_value
     struct node_* m_toLarger;         // pointer to node, if:  feature[m_featureNr] > m_value
     std::vector<int> m_trainSamples;  // a list of indices of the training samples in this node
-    int m_nSamples;                   // the length of m_trainSamples
     
     friend class boost::serialization::access;
     template<class Archive>
     void serialize(Archive & ar, const unsigned int version)
     {
+        // NOTE: There is no need to save the m_trainSamples
         ar & m_featureNr;
         ar & m_value;
-        ar & m_trainSamples;
-        ar & m_nSamples;
         ar & m_toSmallerEqual;
         ar & m_toLarger;
+    }
+    
+    ~node_()
+    {
+        if(m_toLarger) delete m_toLarger;
+        if(m_toSmallerEqual) delete m_toSmallerEqual;
     }
     
 } node;

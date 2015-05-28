@@ -22,7 +22,7 @@ class GBDT
 public:
     GBDT();
 
-    ~GBDT(){}
+    ~GBDT();
 
     bool Init();
 

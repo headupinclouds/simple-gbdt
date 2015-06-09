@@ -8,12 +8,21 @@
 #include <boost/serialization/string.hpp>
 #include <boost/serialization/version.hpp>
 
-typedef struct node_
+struct node
 {
+    node() : m_featureNr(-1), m_value(T_DTYPE(0)), m_toSmallerEqual(0),  m_toLarger(0) {}
+    ~node() {}
+
+    void destroy()
+    {
+        if(m_toLarger) remove(m_toLarger);
+        if(m_toSmallerEqual) remove(m_toSmallerEqual);
+    }
+    
     int m_featureNr;                  // decision on this feature
     T_DTYPE m_value;                  // the prediction value
-    struct node_* m_toSmallerEqual;   // pointer to node, if:  feature[m_featureNr] <=  m_value
-    struct node_* m_toLarger;         // pointer to node, if:  feature[m_featureNr] > m_value
+    node* m_toSmallerEqual;   // pointer to node, if:  feature[m_featureNr] <=  m_value
+    node* m_toLarger;         // pointer to node, if:  feature[m_featureNr] > m_value
     std::vector<int> m_trainSamples;  // a list of indices of the training samples in this node
     
     friend class boost::serialization::access;
@@ -25,19 +34,24 @@ typedef struct node_
         ar & m_value;
         ar & m_toSmallerEqual;
         ar & m_toLarger;
+        ar & m_trainSamples;
     }
     
-    ~node_()
+protected:
+    
+    static void remove(node *n)
     {
-        if(m_toLarger) delete m_toLarger;
-        if(m_toSmallerEqual) delete m_toSmallerEqual;
+        if(!n) return;
+        if(n->m_toLarger) delete n->m_toLarger;
+        if(n->m_toSmallerEqual) delete n->m_toSmallerEqual;
+        delete n;
+        n = 0;
     }
-    
-} node;
+};
 
-typedef struct nodeReduced_
+struct nodeReduced
 {
     node* m_node;
     uint m_size;
-} nodeReduced;
+};
 

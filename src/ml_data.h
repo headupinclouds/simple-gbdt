@@ -5,6 +5,11 @@
 #ifndef __ML_DATA_H__
 #define __ML_DATA_H__
 
+#include <boost/serialization/serialization.hpp>
+#include <boost/serialization/set.hpp>
+#include <boost/serialization/string.hpp>
+#include <boost/serialization/version.hpp>
+
 #include <vector>
 #include <string>
 #include <set>
@@ -23,7 +28,21 @@ public:
     unsigned int m_dimension;
     unsigned int m_num;
 private:
+    
+    friend class boost::serialization::access;
+    template<class Archive>
+    void serialize(Archive & ar, const unsigned int version)
+    {
+        // NOTE: There is no need to save the m_trainSamples
+        ar & m_data;
+        ar & m_target;
+        ar & m_valid_id;
+        ar & m_dimension;
+        ar & m_num;
+    }
+    
 }; //end of class Data
+
 
 class DataReader
 {

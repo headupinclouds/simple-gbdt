@@ -12,7 +12,10 @@
 #include <iomanip>
 
 #include "gbdt.h"
-#include "tbb/parallel_sort.h"
+
+#if HAS_TBB
+#  include "tbb/parallel_sort.h"
+#endif
 
 //using namespace tbb;
 
@@ -53,7 +56,8 @@ GBDT::GBDT()
 
 GBDT::~GBDT()
 {
-
+    for(auto & n : m_trees)
+        n.destroy();
 }
 
 bool GBDT::LoadConfig(const std::string& conf_file)
@@ -468,7 +472,12 @@ void GBDT::TrainSingleTree(
                 list[j].first = ptrInput[j];
                 list[j].second = sortIndex[j];
             }
+
+#if HAS_TBB
             tbb::parallel_sort(list.begin(),list.end());
+#else
+            std::sort(list.begin(), list.end());
+#endif
             for(int j=0;j<nNodeSamples;j++)
             {
                 ptrInput[j] = list[j].first;
@@ -627,10 +636,15 @@ void GBDT::TrainSingleTree(
     
 }
 
+// Original code (deprecated: sequential=0.28 vs recursive=0.35)
+#define DO_RECURSIVE 0
+
 T_DTYPE GBDT::predictSingleTree ( node* n, const Data& data, int data_index )
 {
-    int nFeatures = data.m_dimension;
-    int nr = n->m_featureNr;
+#if DO_RECURSIVE
+    const auto &nFeatures = data.m_dimension;
+    const auto &nr = n->m_featureNr;
+    
     if(nr < -1 || nr >= nFeatures)
     {
         //cout<<"Feature nr:"<<nr<<endl;
@@ -641,19 +655,22 @@ T_DTYPE GBDT::predictSingleTree ( node* n, const Data& data, int data_index )
     if ( n->m_toSmallerEqual == 0 && n->m_toLarger == 0 )
         return n->m_value;
 
-    //TODO : del duplicate check
     if(nr < 0 || nr >= nFeatures)
     {
         //cout<<endl<<"Feature nr: "<<nr<<" (max:"<<nFeatures<<")"<<endl;
         assert(false);
     }
-    T_DTYPE thresh = n->m_value;
-    T_DTYPE feature = data.m_data[data_index][nr];
-
-    if ( feature <= thresh )
-        return predictSingleTree ( n->m_toSmallerEqual, data, data_index );
-    return predictSingleTree ( n->m_toLarger, data, data_index );
     
+    const auto & thresh = n->m_value;
+    const auto & feature = data.m_data[data_index][nr];
+    return predictSingleTree ( (feature <= thresh) ? n->m_toSmallerEqual : n->m_toLarger, data, data_index );
+#else
+    const auto &features = data.m_data[data_index];
+    while( ! (n->m_toSmallerEqual == 0 && n->m_toLarger == 0) )
+        n = (features[n->m_featureNr] <= n->m_value) ? n->m_toSmallerEqual : n->m_toLarger;
+
+    return n->m_value;
+#endif
 }
 
 void GBDT::PredictAllOutputs ( const Data& data, T_VECTOR& predictions)

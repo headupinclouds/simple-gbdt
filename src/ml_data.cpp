@@ -6,7 +6,6 @@
 
 #include "ml_data.h"
 
-
 static void InplaceTrimLeft(std::string& strValue)
 {
 	size_t pos = 0;

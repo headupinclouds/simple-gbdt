@@ -731,7 +731,7 @@ void GBDT::LoadWeights(const std::string& model_file)
     if ( f.is_open() == false )
     {
         //cout << "Load " << model_file << "failed!" << endl;
-        _Exit(1);
+        assert(false);
     }
 
     // load learnrate

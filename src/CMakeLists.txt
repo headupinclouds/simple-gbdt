@@ -29,5 +29,7 @@ if(NOT is_ios AND NOT is_android)
   endif()
 endif()
 
+find_package(Boost CONFIG REQUIRED filesystem system serialization iostreams )
+
 add_library(simple-gbdt ${SIMPLE_GBDT_SRCS})
-target_link_libraries(simple-gbdt ${TBB_LIBRARIES})
+target_link_libraries(simple-gbdt ${TBB_LIBRARIES} Boost::filesystem Boost::system Boost::serialization Boost::iostreams) 

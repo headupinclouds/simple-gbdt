@@ -30,11 +30,40 @@ struct node
     void serialize(Archive & ar, const unsigned int version)
     {
         // NOTE: There is no need to save the m_trainSamples
+#if DO_SQUEEZE
+        uint16_t featureNr;
+        if(Archive::is_loading::value)
+        {
+            ar & featureNr;
+            m_featureNr = featureNr;
+        }
+        else
+        {
+            featureNr = m_featureNr;
+            ar & featureNr;
+        }
+#else
         ar & m_featureNr;
+#endif
+
+#if DO_HALF_FLOAT
+        half_float::detail::uint16 half;
+        if(Archive::is_loading::value)
+        {
+            ar & half;
+            m_value = half_float::detail::half2float(half);
+
+        }
+        else
+        {
+            half = half_float::detail::float2half<std::round_indeterminate>(m_value);
+            ar & half;
+        }
+#else
         ar & m_value;
+#endif
         ar & m_toSmallerEqual;
         ar & m_toLarger;
-        ar & m_trainSamples;
     }
     
 protected:

@@ -686,6 +686,8 @@ void GBDT::PredictAllOutputs ( const Data& data, T_VECTOR& predictions)
         for ( unsigned int k=0; k<m_train_epoch + 1; k++ )
         {
             T_DTYPE v = predictSingleTree ( & ( m_trees[k] ), data, i );
+            
+            //std::cout << "* " << v << std::endl;
             sum += m_lrate * v;  // this is gradient boosting
         }
         predictions[i] = sum;

@@ -41,12 +41,15 @@ public:
     unsigned int getMaxEpochs() const { return m_max_epochs; }
     unsigned int getMaxTreeLeafs() const { return m_max_tree_leafes; }
     unsigned int getFeatureSubspaceSize()  const { return m_feature_subspace_size; }
-    double setLearningRate() const { return m_lrate; }
-    double setDataSampleRatio() const { return m_data_sample_ratio; }
+    double getLearningRate() const { return m_lrate; }
+    double getDataSampleRatio() const { return m_data_sample_ratio; }
+    double getGlobalMean() const { return m_global_mean; }
     
     // Original serialization:
     void SaveWeights(const std::string& model_file);
     void LoadWeights(const std::string& model_file);
+    
+    std::vector<node> & getTrees() { return m_trees; }
     
 private:
     
@@ -83,6 +86,7 @@ private:
     
     void SaveTreeRecursive ( node* n, std::fstream &f );
     void LoadTreeRecursive ( node* n, std::fstream &f , std::string prefix);
+
 private:
     
     //node * m_trees;

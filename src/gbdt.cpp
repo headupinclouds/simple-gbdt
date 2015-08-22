@@ -10,6 +10,8 @@
 #include <time.h>
 #include <sys/time.h>
 #include <iomanip>
+#include <cmath>
+#include <limits>
 
 #include "gbdt.h"
 
@@ -131,7 +133,7 @@ bool GBDT::Init()
     for (unsigned int i = 0; i < m_max_epochs ; ++i )
     {
         m_trees[i].m_featureNr = -1;
-        m_trees[i].m_value = 1e10;
+        m_trees[i].m_value = 1e6;
         m_trees[i].m_toSmallerEqual = 0;
         m_trees[i].m_toLarger = 0;
         m_trees[i].m_trainSamples.clear();
@@ -199,7 +201,7 @@ bool GBDT::Train(const Data& data)
 
 bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
 {
-    int64_t t0 = Milliseconds();
+    //int64_t t0 = Milliseconds();
 
     int nSamples = data.m_num;
     unsigned int nFeatures = data.m_dimension;
@@ -429,7 +431,7 @@ void GBDT::TrainSingleTree(
                 ptrTarget[j] = m_tree_target[n->m_trainSamples[j]];
 
             T_DTYPE* ptrInput = inputTmp + i * nNodeSamples;//TODO: del ????
-            bestPos = rand() % nNodeSamples;
+            bestPos = rand() % nNodeSamples; assert(nNodeSamples > 0);
             optimalSplitValue = ptrInput[bestPos];
             sumLow = 0.0;
             sum2Low = 0.0;
@@ -526,16 +528,18 @@ void GBDT::TrainSingleTree(
         if ( rmseBest < bestFeatureRMSE )
         {
             bestFeature = i;
-            bestFeaturePos = bestPos;
             bestFeatureRMSE = rmseBest;
             optFeatureSplitValue = optimalSplitValue;
-            bestFeatureLow = meanLowBest;
-            bestFeatureHi = meanHiBest;
+            //bestFeatureLow = meanLowBest;
+            //bestFeatureHi = meanHiBest;
+            //bestFeaturePos = bestPos;
         }
     }
 
     n->m_featureNr = randFeatureIDs[bestFeature];
     n->m_value = optFeatureSplitValue;
+    assert(!std::isnan(optFeatureSplitValue));
+    assert(!std::isinf(optFeatureSplitValue));
 
     if ( n->m_featureNr < 0 || n->m_featureNr >= (int)nFeatures )
     {
@@ -592,6 +596,10 @@ void GBDT::TrainSingleTree(
     {
         n->m_featureNr = -1;
         n->m_value = lowCnt < 1 ? hiMean : lowMean;
+        
+        assert(!std::isnan(n->m_value));
+        assert(!std::isinf(n->m_value));
+        
         n->m_toSmallerEqual = 0;
         n->m_toLarger = 0;
         n->m_trainSamples.clear();
@@ -609,6 +617,10 @@ void GBDT::TrainSingleTree(
     n->m_toSmallerEqual = new node;
     n->m_toSmallerEqual->m_featureNr = -1;
     n->m_toSmallerEqual->m_value = lowMean;
+    
+    assert(!std::isnan(lowMean));
+    assert(!std::isinf(lowMean));
+    
     n->m_toSmallerEqual->m_toSmallerEqual = 0;
     n->m_toSmallerEqual->m_toLarger = 0;
     n->m_toSmallerEqual->m_trainSamples = lowList; assert(lowList.size() == lowCnt);
@@ -617,6 +629,10 @@ void GBDT::TrainSingleTree(
     n->m_toLarger = new node;
     n->m_toLarger->m_featureNr = -1;
     n->m_toLarger->m_value = hiMean;
+    
+    assert(!std::isnan(hiMean));
+    assert(!std::isinf(hiMean));
+    
     n->m_toLarger->m_toSmallerEqual = 0;
     n->m_toLarger->m_toLarger = 0;
     n->m_toLarger->m_trainSamples = hiList; assert(hiList.size() == hiCnt);
@@ -641,6 +657,8 @@ void GBDT::TrainSingleTree(
 
 T_DTYPE GBDT::predictSingleTree ( node* n, const Data& data, int data_index )
 {
+    assert(n != 0);
+    
 #if DO_RECURSIVE
     const auto &nFeatures = data.m_dimension;
     const auto &nr = n->m_featureNr;
@@ -686,6 +704,8 @@ void GBDT::PredictAllOutputs ( const Data& data, T_VECTOR& predictions)
         for ( unsigned int k=0; k<m_train_epoch + 1; k++ )
         {
             T_DTYPE v = predictSingleTree ( & ( m_trees[k] ), data, i );
+            
+            assert(!std::isnan(v) && !std::isinf(v));
             
             //std::cout << "* " << v << std::endl;
             sum += m_lrate * v;  // this is gradient boosting

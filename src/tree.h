@@ -56,7 +56,7 @@ struct node
         }
         else
         {
-            half = half_float::detail::float2half<std::round_indeterminate>(m_value);
+            half = half_float::detail::float2half<std::round_to_nearest>(m_value);
             ar & half;
         }
 #else
@@ -84,7 +84,7 @@ struct MiniNode
 {
     MiniNode() {}
     MiniNode(float value, int feature)
-    : m_value16u(half_float::detail::float2half<std::round_indeterminate>(value))
+    : m_value16u(half_float::detail::float2half<std::round_to_nearest>(value))
     , m_toSmallerEqual(0)
     , m_toLarger(0)
     , m_feature(uint16_t(feature))
@@ -107,6 +107,9 @@ struct MiniNode
         {
             // We don't serialize this, but make sure it is available for fast comparisons:
             m_value = half_float::detail::half2float( m_value16u );
+            
+            assert(!std::isnan(m_value));
+            assert(!std::isinf(m_value));
         }
     }
     
@@ -135,6 +138,8 @@ struct MiniTree
             n = &nodes[index];
         }
         //std::cout << n->m_value << std::endl;
+        assert(!std::isnan(n->m_value));
+        assert(!std::isinf(n->m_value));
         return n->m_value;
     }
     
@@ -151,6 +156,8 @@ struct MiniTree
     int init(node *tree)
     {
         int index = nodes.size();
+        assert(!std::isnan(tree->m_value));
+        assert(!std::isinf(tree->m_value));
         nodes.emplace_back(tree->m_value, tree->m_featureNr);
         if(tree->m_toSmallerEqual)
         {
@@ -194,6 +201,19 @@ struct MiniForest
         ar & globalMean;
         ar & learningRate;
         ar & trees;
+        
+        assert(!std::isnan(learningRate));
+        assert(!std::isinf(learningRate));
+        assert(!std::isnan(globalMean));
+        assert(!std::isinf(globalMean));
+        for(auto &t : trees)
+        {
+            for(auto &n : t.nodes)
+            {
+                assert(! std::isnan(n.m_value) );
+                assert(! std::isinf(n.m_value) );
+            }
+        }
     }
 };
 

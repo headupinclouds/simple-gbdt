@@ -5,7 +5,7 @@ string(COMPARE EQUAL "${CMAKE_OSX_SYSROOT}" "iphoneos" is_ios)
 set(SIMPLE_GBDT_SRCS
   gbdt.cpp
   gbdt.h
-  ml_data.cpp
+#  ml_data.cpp
   ml_data.h
   tree.h
   types.h

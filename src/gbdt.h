@@ -76,11 +76,7 @@ private:
         const int* randFeatureIDs
         );
     
-    T_DTYPE predictSingleTree ( 
-        node* n, 
-        const Data& data, 
-        int data_index 
-        );
+    T_DTYPE predictSingleTree(node* n, const Data& data, int data_index);
     
     void cleanTree ( node* n );
     

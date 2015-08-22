@@ -143,9 +143,6 @@ bool DataReader::ReadDataFromCVS(const std::string& input_file, Data& data)
     {
         return false;
     }
-
-    std::cout << "dimension: " << data.m_dimension << std::endl;
-    std::cout << "data num: " << data.m_num << std::endl;
     
     return true;
 }

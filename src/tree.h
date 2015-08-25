@@ -2,6 +2,10 @@
 /// @Date: 2012Äê5ÔÂ28ÈÕ 12:27:04
 /// @Author: wangben
 
+#if HAVE_HALF_FLOAT
+#  include "half.hpp"
+#endif
+
 #include "types.h"
 
 #include <boost/serialization/list.hpp>
@@ -19,8 +23,8 @@ struct node
         if(m_toSmallerEqual) remove(m_toSmallerEqual);
     }
     
-    int m_featureNr;                  // decision on this feature
-    T_DTYPE m_value;                  // the prediction value
+    int m_featureNr;          // decision on this feature
+    T_DTYPE m_value;          // the prediction value
     node* m_toSmallerEqual;   // pointer to node, if:  feature[m_featureNr] <=  m_value
     node* m_toLarger;         // pointer to node, if:  feature[m_featureNr] > m_value
     std::vector<int> m_trainSamples;  // a list of indices of the training samples in this node
@@ -46,13 +50,12 @@ struct node
         ar & m_featureNr;
 #endif
 
-#if DO_HALF_FLOAT
+#if HAVE_HALF_FLOAT
         half_float::detail::uint16 half;
         if(Archive::is_loading::value)
         {
             ar & half;
             m_value = half_float::detail::half2float(half);
-
         }
         else
         {
@@ -79,7 +82,7 @@ protected:
     }
 };
 
-#if DO_HALF_FLOAT
+#if HAVE_HALF_FLOAT
 struct MiniNode
 {
     MiniNode() {}
@@ -89,7 +92,13 @@ struct MiniNode
     , m_toLarger(0)
     , m_feature(uint16_t(feature))
     , m_value(value)
-    {}
+    {
+        if(value > 100.f)
+        {
+            std::cout << "TOO BIG: " << value << std::endl;
+        }
+        assert( !std::isinf(half_float::detail::half2float(m_value16u)) );
+    }
     
     friend class boost::serialization::access;
     template<class Archive>
@@ -138,8 +147,8 @@ struct MiniTree
             n = &nodes[index];
         }
         //std::cout << n->m_value << std::endl;
-        assert(!std::isnan(n->m_value));
-        assert(!std::isinf(n->m_value));
+        //assert(!std::isnan(n->m_value));
+        //assert(!std::isinf(n->m_value));
         return n->m_value;
     }
     
@@ -153,7 +162,7 @@ struct MiniTree
         ar & nodes;
     }
     
-    int init(node *tree)
+    int init(const node *tree)
     {
         int index = nodes.size();
         assert(!std::isnan(tree->m_value));
@@ -165,6 +174,16 @@ struct MiniTree
             nodes[index].m_toLarger = init(tree->m_toLarger);
         }
         return index;
+    }
+    
+    std::vector<int> getFeatureSubset()
+    {
+        std::vector<int> features;
+        for(const auto &n : nodes)
+            if(n.m_toSmallerEqual)
+                features.push_back(n.m_feature);
+        
+        return features;
     }
     
 protected:
@@ -193,6 +212,19 @@ struct MiniForest
         return score;
     }
     
+    std::vector<int> getFeatureSubset()
+    {
+        std::vector<int> features;
+        for(auto &t : trees)
+        {
+            auto f = t.getFeatureSubset();
+            std::copy(f.begin(), f.end(), std::back_inserter(features));
+        }
+        std::sort(features.begin(), features.end());
+        std::unique(features.begin(), features.end());
+        return features;
+    }
+
     // Boost serialization:
     friend class boost::serialization::access;
     template<class Archive>
@@ -208,7 +240,7 @@ struct MiniForest
         assert(!std::isinf(globalMean));
         for(auto &t : trees)
         {
-            for(auto &n : t.nodes)
+            for(const auto &n : t.nodes)
             {
                 assert(! std::isnan(n.m_value) );
                 assert(! std::isinf(n.m_value) );

@@ -363,6 +363,17 @@ void GBDT::cleanTree ( node* n )
         cleanTree ( n->m_toLarger );
 }
 
+template <typename T>
+static inline constexpr T pow2(const T& x) { return x*x; }
+
+template <typename T>
+T rmse(const T &sumLow, const T &sum2Low, const T &cntLow, const T &sumHi, const T &sum2Hi, const T&cntHi)
+{
+    double rmse = ((sum2Low/cntLow) - pow2(sumLow/cntLow)) * cntLow;
+    rmse += ((sum2Hi/cntHi) - pow2(sumHi/cntHi)) * cntHi;
+    rmse = std::sqrt(rmse/(cntLow+cntHi));
+    return rmse;
+}
 
 void GBDT::TrainSingleTree(
     node * n,
@@ -401,11 +412,12 @@ void GBDT::TrainSingleTree(
         sumTarget += v;
         sum2Target += v*v;
     }
+    
+    const T_DTYPE infinity = std::numeric_limits<T_DTYPE>::max();
 
-    int bestFeature = -1, bestFeaturePos = -1;
-    double bestFeatureRMSE = 1e10;
-    T_DTYPE bestFeatureLow = 1e10, bestFeatureHi = 1e10;
-    T_DTYPE optFeatureSplitValue = 1e10;
+    int bestFeature = -1;
+    T_DTYPE bestFeatureRMSE = infinity;
+    T_DTYPE optFeatureSplitValue = infinity;
 
     //TODO check m_feature_subspace_size not larger than nFeatures!!
     // search optimal split point in all tmp input features
@@ -413,8 +425,7 @@ void GBDT::TrainSingleTree(
     {
         // search the optimal split value, which reduce the RMSE the most
         T_DTYPE optimalSplitValue = 0.0;
-        double rmseBest = 1e10;
-        T_DTYPE meanLowBest = 1e10, meanHiBest = 1e10;
+        double rmseBest = infinity;
         int bestPos = -1;
         double sumLow = 0.0, sum2Low = 0.0, sumHi = sumTarget, sum2Hi = sum2Target, cntLow = 0.0, cntHi = nNodeSamples;
         T_DTYPE* ptrInput = inputTmp + i * nNodeSamples;
@@ -425,20 +436,62 @@ void GBDT::TrainSingleTree(
         for ( int j=0;j<nNodeSamples;j++ )
             ptrInput[j] = data.m_data[ n->m_trainSamples[j] ][nr];  //line :n->m_trainSamples[j] , row:nr
 
-        if ( m_use_opt_splitpoint == false ) // random threshold value
+     
+        if(m_use_opt_splitpoint)  // search for the optimal threshold value, goal: best RMSE reduction split
+        {
+            // fast sort of the input dimension
+            std::vector<std::pair<T_DTYPE, int> > list(nNodeSamples);
+            for(int j=0;j<nNodeSamples;j++)
+            {
+                list[j].first = ptrInput[j];
+                list[j].second = j;
+            }
+
+#if HAS_TBB
+            tbb::parallel_sort(list.begin(),list.end());
+#else
+            std::sort(list.begin(), list.end());
+#endif
+            for(int j=0;j<nNodeSamples;j++)
+            {
+                ptrInput[j] = list[j].first;
+                sortIndex[j] = list[j].second;
+                ptrTarget[j] = m_tree_target[n->m_trainSamples[sortIndex[j]]];
+            }
+            
+            for(int j = 0; j < (nNodeSamples -1); j++)
+            {
+                T_DTYPE t = ptrTarget[j];
+                sumLow += t;
+                sum2Low += t*t;
+                sumHi -= t;
+                sum2Hi -= t*t;
+                cntLow += T_DTYPE(1);
+                cntHi -= T_DTYPE(1);
+
+                T_DTYPE v0 = ptrInput[j], v1 = ptrInput[j+1];
+                if ( v0 == v1 ) // skip equal successors
+                    continue;
+
+                //rmse:
+                double rmse = ::rmse(sumLow, sum2Low, cntLow, sumHi, sum2Hi, cntHi);
+                if ( rmse < rmseBest )
+                {
+                    optimalSplitValue = v0;
+                    rmseBest = rmse;
+                }
+            }
+        }
+        else // use a random threshold value
         {
             for ( int j=0;j<nNodeSamples;j++ )
                 ptrTarget[j] = m_tree_target[n->m_trainSamples[j]];
-
+            
             T_DTYPE* ptrInput = inputTmp + i * nNodeSamples;//TODO: del ????
-            bestPos = rand() % nNodeSamples; assert(nNodeSamples > 0);
+            assert(nNodeSamples > 0);
+            bestPos = rand() % nNodeSamples;
             optimalSplitValue = ptrInput[bestPos];
-            sumLow = 0.0;
-            sum2Low = 0.0;
-            cntLow = 0.0;
-            sumHi = 0.0;
-            sum2Hi = 0.0;
-            cntHi = 0.0;
+            sumLow = sum2Low = cntLow = sumHi = sum2Hi = cntHi = 0.0;
             for ( int j=0;j<nNodeSamples;j++ )
             {
                 //T_DTYPE v = ptrInput[j];
@@ -456,73 +509,7 @@ void GBDT::TrainSingleTree(
                     cntHi += 1.0;
                 }
             }
-            rmseBest = ( sum2Low/cntLow - ( sumLow/cntLow ) * ( sumLow/cntLow ) ) *cntLow;
-            rmseBest += ( sum2Hi/cntHi - ( sumHi/cntHi ) * ( sumHi/cntHi ) ) *cntHi;
-            rmseBest = sqrt ( rmseBest/ ( cntLow+cntHi ) );
-            meanLowBest = sumLow/cntLow;
-            meanHiBest = sumHi/cntHi;
-        }
-        else  // search for the optimal threshold value, goal: best RMSE reduction split
-        {
-            // fast sort of the input dimension
-            for ( int j=0;j<nNodeSamples;j++ )
-                sortIndex[j] = j;
-            
-            std::vector<std::pair<T_DTYPE, int> > list(nNodeSamples);
-            for(int j=0;j<nNodeSamples;j++)
-            {
-                list[j].first = ptrInput[j];
-                list[j].second = sortIndex[j];
-            }
-
-#if HAS_TBB
-            tbb::parallel_sort(list.begin(),list.end());
-#else
-            std::sort(list.begin(), list.end());
-#endif
-            for(int j=0;j<nNodeSamples;j++)
-            {
-                ptrInput[j] = list[j].first;
-                sortIndex[j] = list[j].second;
-            }
-            for ( int j=0;j<nNodeSamples;j++ )
-                ptrTarget[j] = m_tree_target[n->m_trainSamples[sortIndex[j]]];
-            
-            int j = 0;
-            while ( j < nNodeSamples-1 )
-            {
-                T_DTYPE t = ptrTarget[j];
-                sumLow += t;
-                sum2Low += t*t;
-                sumHi -= t;
-                sum2Hi -= t*t;
-                cntLow += 1.0;
-                cntHi -= 1.0;
-
-                T_DTYPE v0 = ptrInput[j], v1 = 1e10;
-                if ( j < nNodeSamples -1 )
-                    v1 = ptrInput[j+1];
-                if ( v0 == v1 ) // skip equal successors
-                {
-                    j++;
-                    continue;
-                }
-                //rmse
-                double rmse = ( sum2Low/cntLow - ( sumLow/cntLow ) * ( sumLow/cntLow ) ) *cntLow;
-                rmse += ( sum2Hi/cntHi   - ( sumHi/cntHi ) * ( sumHi/cntHi ) ) *cntHi;
-                rmse = sqrt ( rmse/ ( cntLow+cntHi ) );
-
-                if ( rmse < rmseBest )
-                {
-                    optimalSplitValue = v0;
-                    rmseBest = rmse;
-                    bestPos = j+1;
-                    meanLowBest = sumLow/cntLow;
-                    meanHiBest = sumHi/cntHi;
-                }
-
-                j++;
-            }
+            rmseBest = ::rmse(sumLow, sum2Low, cntLow, sumHi, sum2Hi, cntHi);
         }
 
         if ( rmseBest < bestFeatureRMSE )
@@ -530,16 +517,12 @@ void GBDT::TrainSingleTree(
             bestFeature = i;
             bestFeatureRMSE = rmseBest;
             optFeatureSplitValue = optimalSplitValue;
-            //bestFeatureLow = meanLowBest;
-            //bestFeatureHi = meanHiBest;
-            //bestFeaturePos = bestPos;
         }
     }
 
     n->m_featureNr = randFeatureIDs[bestFeature];
     n->m_value = optFeatureSplitValue;
-    assert(!std::isnan(optFeatureSplitValue));
-    assert(!std::isinf(optFeatureSplitValue));
+    assert(optFeatureSplitValue != infinity);
 
     if ( n->m_featureNr < 0 || n->m_featureNr >= (int)nFeatures )
     {
@@ -587,8 +570,7 @@ void GBDT::TrainSingleTree(
     lowMean /= lowCnt;
     hiMean /= hiCnt;
     
-    if ( hiCnt+lowCnt != nNodeSamples || lowCnt != cnt )
-        assert ( false );
+    assert( !( hiCnt+lowCnt != nNodeSamples || lowCnt != cnt ) );
     ///////////////////////////
     
     // break, if too less samples
@@ -618,24 +600,20 @@ void GBDT::TrainSingleTree(
     n->m_toSmallerEqual->m_featureNr = -1;
     n->m_toSmallerEqual->m_value = lowMean;
     
-    assert(!std::isnan(lowMean));
-    assert(!std::isinf(lowMean));
-    
     n->m_toSmallerEqual->m_toSmallerEqual = 0;
     n->m_toSmallerEqual->m_toLarger = 0;
-    n->m_toSmallerEqual->m_trainSamples = lowList; assert(lowList.size() == lowCnt);
+    n->m_toSmallerEqual->m_trainSamples = lowList;
+    assert(lowList.size() == lowCnt);
 
     // prepare second new node
     n->m_toLarger = new node;
     n->m_toLarger->m_featureNr = -1;
     n->m_toLarger->m_value = hiMean;
     
-    assert(!std::isnan(hiMean));
-    assert(!std::isinf(hiMean));
-    
     n->m_toLarger->m_toSmallerEqual = 0;
     n->m_toLarger->m_toLarger = 0;
-    n->m_toLarger->m_trainSamples = hiList; assert(hiList.size() == hiCnt);
+    n->m_toLarger->m_trainSamples = hiList;
+    assert(hiList.size() == hiCnt);
 
     // add the new two nodes to the heap
     nodeReduced lowNode, hiNode;
@@ -663,21 +641,13 @@ T_DTYPE GBDT::predictSingleTree ( node* n, const Data& data, int data_index )
     const auto &nFeatures = data.m_dimension;
     const auto &nr = n->m_featureNr;
     
-    if(nr < -1 || nr >= nFeatures)
-    {
-        //cout<<"Feature nr:"<<nr<<endl;
-        assert(false);
-    }
+    assert(!(nr < -1 || nr >= nFeatures));
     
     // here, on a leaf: predict the constant value
     if ( n->m_toSmallerEqual == 0 && n->m_toLarger == 0 )
         return n->m_value;
 
-    if(nr < 0 || nr >= nFeatures)
-    {
-        //cout<<endl<<"Feature nr: "<<nr<<" (max:"<<nFeatures<<")"<<endl;
-        assert(false);
-    }
+    assert(!(nr < 0 || nr >= nFeatures));
     
     const auto & thresh = n->m_value;
     const auto & feature = data.m_data[data_index][nr];
@@ -711,92 +681,6 @@ void GBDT::PredictAllOutputs ( const Data& data, T_VECTOR& predictions)
             sum += m_lrate * v;  // this is gradient boosting
         }
         predictions[i] = sum;
-    }
-}
-
-void GBDT::SaveWeights(const std::string& model_file)
-{
-    //cout<<"Save:"<<model_file <<endl;
-    std::fstream f ( model_file.c_str(), std::ios::out );
-
-    // save learnrate
-    f.write ( ( char* ) &m_lrate, sizeof ( m_lrate ) );
-
-    // save number of epochs
-    f.write ( ( char* ) &m_train_epoch, sizeof ( m_train_epoch ) );
-
-    // save global means
-    f.write ( ( char* ) &m_global_mean, sizeof ( m_global_mean ) );
-
-    // save trees
-    for ( unsigned int j=0;j<m_train_epoch+1;j++ )
-        SaveTreeRecursive ( & ( m_trees[j] ), f );
-
-    //cout << "debug: train_epoch: " << m_train_epoch << endl;
-    f.close();
-}
-
-void GBDT::SaveTreeRecursive ( node* n, std::fstream &f )
-{
-    //cout << "debug_save: " << n->m_value << " " << n->m_featureNr << endl;
-    f.write ( ( char* ) n, sizeof ( node ) );
-    if ( n->m_toSmallerEqual )
-        SaveTreeRecursive ( n->m_toSmallerEqual, f );
-    if ( n->m_toLarger )
-        SaveTreeRecursive ( n->m_toLarger, f );
-}
-
-void GBDT::LoadWeights(const std::string& model_file)
-{
-    //cout<<"Load:"<<model_file<<endl;
-    std::fstream f ( model_file.c_str(), std::ios::in );
-    if ( f.is_open() == false )
-    {
-        //cout << "Load " << model_file << "failed!" << endl;
-        assert(false);
-    }
-
-    // load learnrate
-    f.read ( ( char* ) &m_lrate, sizeof ( m_lrate ) );
-
-    // load number of epochs
-    f.read ( ( char* ) &m_train_epoch, sizeof ( m_train_epoch ) );
-
-    // load global means
-    f.read ( ( char* ) &m_global_mean, sizeof ( m_global_mean )  );
-
-    // allocate and load the trees
-    //m_trees = new node[m_train_epoch+1];
-    m_trees.resize(m_train_epoch+1);
-    for ( unsigned int j=0;j<m_train_epoch+1;j++ )
-    {
-        std::string prefix = "";
-        LoadTreeRecursive ( & ( m_trees[j] ), f, prefix );
-    }
-
-    f.close();
-}
-
-void GBDT::LoadTreeRecursive ( node* n, std::fstream &f, std::string prefix )
-{
-    f.read ( ( char* ) n, sizeof ( node ) );
-    
-    //cout << prefix;
-    //cout << "debug_load: " << n->m_value << " " << n->m_featureNr << endl;
-    if ( n->m_toLarger == 0 && n->m_toSmallerEqual == 0 )
-    {
-        assert( n->m_featureNr == -1);
-    }
-    prefix += "    ";
-    if ( n->m_toSmallerEqual )
-    {
-        n->m_toSmallerEqual = new node;
-        LoadTreeRecursive ( n->m_toSmallerEqual, f , prefix);
-    }
-    if ( n->m_toLarger )
-    {
-        n->m_toLarger = new node;
-        LoadTreeRecursive ( n->m_toLarger, f , prefix);
     }
 }
 

@@ -43,17 +43,4 @@ private:
     
 }; //end of class Data
 
-
-class DataReader
-{
-public:
-    DataReader(){}
-    ~DataReader(){}
-    bool ReadDataFromL2R(const std::string& input_file, Data& data, unsigned int dimentions);
-    bool ReadDataFromCVS(const std::string& input_file, Data& data);
-    
-private:
-}; //end of class DataReader
-
-
 #endif /* __ML_DATA_H__ */

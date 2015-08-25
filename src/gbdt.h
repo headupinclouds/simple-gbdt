@@ -45,12 +45,18 @@ public:
     double getDataSampleRatio() const { return m_data_sample_ratio; }
     double getGlobalMean() const { return m_global_mean; }
     
-    // Original serialization:
-    void SaveWeights(const std::string& model_file);
-    void LoadWeights(const std::string& model_file);
-    
     std::vector<node> & getTrees() { return m_trees; }
-    
+
+    MiniForest getMiniForest() const
+    {
+        MiniForest forest;
+        forest.trees.resize( m_trees.size() );
+        for(int i = 0; i < m_trees.size(); i++)
+            forest.trees[i].init( &m_trees[i] );
+        
+        return forest;
+    }
+
 private:
     
     friend class boost::serialization::access;
@@ -79,9 +85,6 @@ private:
     T_DTYPE predictSingleTree(node* n, const Data& data, int data_index);
     
     void cleanTree ( node* n );
-    
-    void SaveTreeRecursive ( node* n, std::fstream &f );
-    void LoadTreeRecursive ( node* n, std::fstream &f , std::string prefix);
 
 private:
     

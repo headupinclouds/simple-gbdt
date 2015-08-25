@@ -29,8 +29,6 @@ public:
     bool Train(const Data& data);
 
     void PredictAllOutputs ( const Data& data, T_VECTOR& predictions);
-
-    bool LoadConfig(const std::string& conf_file);
     
     void setMaxEpochs(unsigned int n) { m_max_epochs = n; }
     void setMaxTreeLeafs(unsigned int n) { m_max_tree_leafes = n; }

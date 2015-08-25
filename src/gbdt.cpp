@@ -62,69 +62,6 @@ GBDT::~GBDT()
         n.destroy();
 }
 
-bool GBDT::LoadConfig(const std::string& conf_file)
-{
-    std::ifstream fs;
-    fs.open(conf_file.c_str(), std::ios_base::in);
-
-    if (fs.fail())
-    {
-        std::cerr << " Warning ! Conf File isn't exist. Use default setting!" << conf_file << std::endl;
-        return false;
-    }
-    
-    std::string line;
-    while (getline(fs, line))
-    {
-        string::size_type pos = line.find("=");
-        if( pos != string::npos && pos != (line.length() - 1) )
-        {
-            string key = line.substr(0, pos);
-            string value = line.substr(pos+1);
-
-            std::stringstream sstream;
-            if ( key == "max_epochs" )
-            {
-                sstream << value;
-                sstream >> m_max_epochs;
-            } 
-            else if ( key == "max_tree_leafes" )
-            {
-                sstream << value;
-                sstream >> m_max_tree_leafes;
-            }
-            else if ( key == "feature_subspace_size" )
-            {
-                sstream << value;
-                sstream >> m_feature_subspace_size;
-            }
-            else if ( key == "use_opt_splitpoint" )
-            {
-                if ( value == "false" ) m_use_opt_splitpoint = false;
-            }
-            else if ( key == "learn_rate" )
-            {
-                sstream << value;
-                sstream >> m_lrate;
-            }
-            else if ( key == "data_sample_ratio" )
-            {
-                sstream << value;
-                sstream >> m_data_sample_ratio;
-                if (m_data_sample_ratio > 1)
-                {
-                    m_data_sample_ratio = 1;
-                }
-                else if ( m_data_sample_ratio < 0 )
-                {
-                    m_data_sample_ratio = 0.01;
-                }
-            }
-        }
-    }
-    return true;
-}
-
 bool GBDT::Init()
 {
     //m_trees = new node[m_max_epochs];
@@ -206,19 +143,10 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     int nSamples = data.m_num;
     unsigned int nFeatures = data.m_dimension;
     
-#define USE_STL 1
-
-#if USE_STL
     std::deque<bool> usedFeatures(data.m_dimension);
     std::vector<T_DTYPE> inputTmp((nSamples+1)*m_feature_subspace_size);
     std::vector<T_DTYPE> inputTargetSort((nSamples+1)*m_feature_subspace_size);
     std::vector<int> sortIndex(nSamples);
-#else
-    bool* usedFeatures = new bool[data.m_dimension];
-    T_DTYPE* inputTmp = new T_DTYPE[(nSamples+1)*m_feature_subspace_size];
-    T_DTYPE* inputTargetsSort = new T_DTYPE[(nSamples+1)*m_feature_subspace_size];
-    int* sortIndex = new int[nSamples];
-#endif
     
     //----first epoch----
     if (train_epoch == 0)
@@ -332,29 +260,12 @@ bool GBDT::ModelUpdate(const Data& data, unsigned int train_epoch, double& rmse)
     
     //cout<<"RMSE:"<< rmse <<" " << trainRMSE << " "<<std::flush;
     //cout<<"cost: " << Milliseconds() -t0<<"[ms]"<<endl;
-
-#if !USE_STL
-    delete[] usedFeatures;
-    delete[] inputTmp;
-    delete[] inputTargetsSort;
-    delete[] sortIndex;
-    usedFeatures = NULL;
-    inputTmp = NULL;
-    inputTargetsSort = NULL;
-    sortIndex = NULL;
-#endif
     
     return true;
 }
 
 void GBDT::cleanTree ( node* n )
 {
-    //if ( n->m_trainSamples )
-    //{
-    //    delete[] n->m_trainSamples;
-    //    n->m_trainSamples = 0;
-    //}
-    
     n->m_trainSamples.clear();
 
     if ( n->m_toSmallerEqual )

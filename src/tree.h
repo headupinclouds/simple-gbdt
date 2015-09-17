@@ -2,6 +2,9 @@
 /// @Date: 2012Äê5ÔÂ28ÈÕ 12:27:04
 /// @Author: wangben
 
+#ifndef GBDT_TREE_H
+#define GBDT_TREE_H
+
 #if HAVE_HALF_FLOAT
 #  include "half.hpp"
 #endif
@@ -83,6 +86,7 @@ protected:
 };
 
 #if HAVE_HALF_FLOAT
+
 struct MiniNode
 {
     MiniNode() {}
@@ -257,3 +261,4 @@ struct nodeReduced
     uint m_size;
 };
 
+#endif // GBDT_TREE_H

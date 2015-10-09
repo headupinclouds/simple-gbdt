@@ -133,6 +133,9 @@ bool GBDT::Train(const Data& data)
     }
     m_train_epoch = train_epoch - 1;
     
+    // No need to store empty trees beyond max training epoch:
+    m_trees.erase(m_trees.begin() + train_epoch, m_trees.end());
+    
     return true;
 }
 
@@ -582,7 +585,7 @@ void GBDT::PredictAllOutputs ( const Data& data, T_VECTOR& predictions)
     {
         double sum = m_global_mean;
         // for every boosting epoch : CORRECT, but slower
-        for ( unsigned int k=0; k<m_train_epoch + 1; k++ )
+        for ( unsigned int k=0; k<m_trees.size(); k++ )
         {
             T_DTYPE v = predictSingleTree ( & ( m_trees[k] ), data, i );
             

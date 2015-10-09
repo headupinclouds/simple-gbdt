@@ -48,8 +48,8 @@ public:
     MiniForest getMiniForest() const
     {
         MiniForest forest;
-        forest.trees.resize( m_trees.size() );
-        for(int i = 0; i < m_trees.size(); i++)
+        forest.trees.resize( m_train_epoch );
+        for(int i = 0; i < m_train_epoch; i++)
             forest.trees[i].init( &m_trees[i] );
         
         return forest;

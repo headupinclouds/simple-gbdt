@@ -168,7 +168,7 @@ struct MiniTree
     
     int init(const node *tree)
     {
-        int index = nodes.size();
+        int index = int(nodes.size());
         assert(!std::isnan(tree->m_value));
         assert(!std::isinf(tree->m_value));
         nodes.emplace_back(tree->m_value, tree->m_featureNr);

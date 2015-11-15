@@ -77,6 +77,7 @@ bool GBDT::Init()
     }
 
     srand(time(0));
+    
 #if 0
     cout << "configure--------" << endl;
     cout <<  "  max_epochs: " << m_max_epochs << endl;
@@ -303,7 +304,7 @@ void GBDT::TrainSingleTree(
     unsigned int nFeatures = data.m_dimension;
     
     // break criteria: tree size limit or too less training samples
-    unsigned int nS = largestNodes.size();
+    size_t nS = largestNodes.size();
     if ( nS >= m_max_tree_leafes || n->m_trainSamples.size() <= 1 )
         return;
 
@@ -316,7 +317,7 @@ void GBDT::TrainSingleTree(
     }
 
     // the number of training samples in this node
-    int nNodeSamples = n->m_trainSamples.size();
+    size_t nNodeSamples = n->m_trainSamples.size();
 
     // precalc sums and squared sums of targets
     double sumTarget = 0.0, sum2Target = 0.0;
